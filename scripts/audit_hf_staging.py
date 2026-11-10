@@ -75,7 +75,7 @@ def timestamp_metrics(frame: pd.DataFrame, fixtures: pd.DataFrame, table: str) -
         how="left",
         validate="many_to_one",
     )
-    known_at = pd.to_datetime(joined["known_at"], utc=True, errors="coerce")
+    known_at = pd.to_datetime(joined["known_at"], format="mixed", utc=True, errors="coerce")
     valid = joined["kickoff_utc"].notna() & known_at.notna()
     before = valid & (known_at < joined["kickoff_utc"])
     at_or_after = valid & (known_at >= joined["kickoff_utc"])
@@ -111,7 +111,7 @@ def odds_identity_metrics(frame: pd.DataFrame) -> dict[str, int | list[str]]:
 
     # Normalize equivalent timestamp representations to UTC before key comparison.
     key_frame = frame.loc[complete_key, ODDS_UNIQUE_KEY].copy()
-    parsed_known_at = pd.to_datetime(key_frame["known_at"], utc=True, errors="coerce")
+    parsed_known_at = pd.to_datetime(key_frame["known_at"], format="mixed", utc=True, errors="coerce")
     canonical_known_at = key_frame["known_at"].astype("string").copy()
     valid_timestamps = parsed_known_at.notna()
     canonical_known_at.loc[valid_timestamps] = parsed_known_at.loc[valid_timestamps].map(
