@@ -4,8 +4,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from huggingface_hub import HfApi, hf_hub_download
 import pandas as pd
+
+from huggingface_hub import HfApi, hf_hub_download
 
 REPO_ID = "eatpizzanot/soccer-dataset"
 OUT = Path("output")
