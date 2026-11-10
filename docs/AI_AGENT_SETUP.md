@@ -4,9 +4,9 @@
 
 - Trigger manually from GitHub Actions → Gemini Free AI Coding Agent → Run workflow.
 - Runs on the GitHub-hosted `ubuntu-latest` standard runner; no GPU or local machine is used.
-- Uses Google Gemini Developer API model `gemini-3.5-flash-lite`, currently listed with free input/output pricing.
+- Uses Google Gemini Developer API model `gemini-3.8-flash`, currently listed with free input/output pricing.
 - Requires the repository Actions secret `GEMINI_API_KEY`.
-- The workflow stops on missing key, quota/rate limit, or API failure. There is no paid fallback.
+- The primary model is gemini-3.8-flash; on transient server errors (HTTP 500/502/503/504), it retries twice with exponential backoff and jitter, then tries gemini-3.6-flash and gemini-3.1-flash-lite in order. HTTP 400/401/403/404/429 fails fast. All model IDs are restricted to an explicit allowlist; there is no paid fallback.
 - The workflow is split into two isolated jobs: generation/validation has read-only repository permission; publishing runs on a fresh runner with write permission and never executes generated code.
 - Proposed changes are checked with Ruff, compileall, and pytest before a patch artifact is passed to the publisher.
 
@@ -36,6 +36,15 @@
 ## API connectivity smoke test
 
 - Run **GitHub Actions → Gemini API Smoke Test → Run workflow** to test the API without invoking the coding agent.
-- Select `gemini-3.5-flash-lite` (default) or `gemini-3.8-flash`.
+- Select `gemini-3.8-flash` (default) or `gemini-3.8-flash`.
 - This workflow only makes one structured JSON generation request. It has read-only repository permission, does not modify files, create artifacts, create branches, or open pull requests.
 - A successful run confirms API access for the selected model at that time; it does not guarantee future quota or availability.
+
+## Multi-model routing
+
+- The coding agent uses a fixed, reviewed Free Tier model allowlist: gemini-3.8-flash (primary), gemini-3.6-flash, and gemini-3.1-flash-lite (fallback order).
+- Each model gets at most two attempts. Retry delays use exponential backoff plus jitter.
+- Fallback is only used after retryable server errors (HTTP 500/502/503/504). Authentication, invalid request, model access, and quota/rate-limit errors (400/401/403/404/429) stop immediately.
+- Network/DNS/TLS errors are retried against the same model; they do not trigger model fallback because they are not evidence of model-specific overload.
+- The smoke-test workflow tests exactly the selected model so its result identifies which model was actually checked.
+- The allowlist prevents accidentally selecting an unapproved or paid model. Free Tier availability and quotas are provider-controlled and not guaranteed.
