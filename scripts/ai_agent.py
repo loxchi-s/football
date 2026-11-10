@@ -119,7 +119,6 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
     payload = {
         "contents": [{"parts": [{"text": instructions}]}],
         "generationConfig": {
-            "temperature": 0.1,
             "maxOutputTokens": 16_000,
             "responseMimeType": "application/json",
             "responseSchema": schema,
