@@ -134,7 +134,7 @@ $$;
 -- A worker may disappear during its final attempt. Reap expired exhausted leases.
 CREATE OR REPLACE FUNCTION anvil_reap_exhausted_jobs() RETURNS INTEGER
 LANGUAGE plpgsql
-AS $
+AS $$
 DECLARE
     v_count INTEGER;
 BEGIN
@@ -154,7 +154,7 @@ BEGIN
     GET DIAGNOSTICS v_count = ROW_COUNT;
     RETURN v_count;
 END;
-$;
+$$;
 
 -- Heartbeat is owner-fenced: a stale worker cannot extend another worker's lease.
 CREATE OR REPLACE FUNCTION anvil_heartbeat_job(
