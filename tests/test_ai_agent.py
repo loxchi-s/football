@@ -143,13 +143,11 @@ def test_gemini_retries_transient_api_error(monkeypatch):
     assert state["calls"] == 2
     assert state["closed"] is True
 
-
-
 def test_gemini_falls_back_after_repeated_503(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
     monkeypatch.setenv("GEMINI_FALLBACK_MODELS", "gemini-3.6-flash")
-    
+
     class FakeAPIError(Exception):
         code = 503
 
