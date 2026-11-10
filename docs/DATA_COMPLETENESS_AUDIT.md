@@ -16,8 +16,10 @@ The manual `Hugging Face football data staging` workflow:
 ## Checks
 
 - Played-match counts grouped by league and derived season (July–June boundary).
-- Stable fixture ID nulls and duplicates.
+- Stable fixture ID nulls and duplicates; match rows must be a subset of the full selected fixture scope.
+- Selected fixture kickoff timestamps must parse successfully.
 - Child-row orphan checks against the full selected fixture scope, not only played matches.
+- Post-match statistics with a `known_at` timestamp before kickoff fail the audit.
 - `match_stats`: one row per fixture ID; duplicate fixture IDs fail.
 - `odds`: multiple rows per fixture are valid. Uniqueness is checked using `fixture_id + bookmaker + source + known_at`; exact duplicate rows and incomplete composite keys fail.
 - Null counts/rates for selected important fields; absent columns are explicitly reported.
@@ -33,7 +35,7 @@ The manual `Hugging Face football data staging` workflow:
 
 ## Status semantics
 
-- `FAIL`: null/duplicate stable match IDs, invalid match kickoff, invalid selected fixture IDs, missing child fixture key, null/orphan child IDs, duplicate match_stats fixture IDs, or duplicate/incomplete odds composite keys.
+- `FAIL`: null/duplicate stable match IDs, invalid match or selected-fixture kickoff, invalid selected fixture IDs, match rows outside fixture scope, missing child fixture key, null/orphan child IDs, pre-kickoff match_stats timestamps, duplicate match_stats fixture IDs, or duplicate/incomplete odds composite keys.
 - `REVIEW_REQUIRED`: structural checks pass, but no trusted expected-count baseline exists to prove per-season completeness. This is not a PASS.
 
 ## Known limitations
