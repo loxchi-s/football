@@ -70,3 +70,20 @@ def test_match_stats_are_never_pre_match_features() -> None:
 
     assert result["pre_match_eligible_rows"] == 0
     assert result["usage_classification"] == "POST_MATCH_ONLY"
+
+def test_timestamp_metrics_skip_duplicate_fixture_scope_without_crashing() -> None:
+    """Skip temporal comparison when fixture IDs make kickoff mapping ambiguous."""
+    fixtures = pd.DataFrame(
+        [
+            {"hf_fixture_id": 10, "kickoff_utc": pd.Timestamp("2026-01-01T12:00:00Z")},
+            {"hf_fixture_id": 10, "kickoff_utc": pd.Timestamp("2026-01-01T13:00:00Z")},
+        ]
+    )
+    odds = pd.DataFrame(
+        [{"fixture_id": 10, "known_at": "2026-01-01T11:00:00Z"}]
+    )
+
+    result = timestamp_metrics(odds, fixtures, "odds")
+
+    assert result["duplicate_fixture_scope_ids"] == 1
+    assert result["temporal_check_status"] == "SKIPPED_INVALID_FIXTURE_SCOPE"
