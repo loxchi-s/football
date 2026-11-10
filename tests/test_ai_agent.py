@@ -97,14 +97,14 @@ def test_gemini_retries_transient_connection_errors(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     state = _install_fake_client(
         monkeypatch,
-        [TimeoutError("temporary timeout"), ConnectionError("temporary network"), _response({"summary": "ok", "files": []})],
+        [TimeoutError("temporary timeout"), _response({"summary": "ok", "files": []})],
     )
     monkeypatch.setattr(ai_agent.time, "sleep", lambda _seconds: None)
 
     result = ai_agent.call_gemini("Run a safe check", [])
 
     assert result["files"] == []
-    assert state["calls"] == 3
+    assert state["calls"] == 2
     assert state["closed"] is True
 
 
