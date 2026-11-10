@@ -35,3 +35,33 @@ jobs:
         run: python -m compileall -q scripts tests
       - name: Unit tests
         run: pytest -q
+
+  anvil-postgres-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anvil_test
+          POSTGRES_PASSWORD: anvil_test
+          POSTGRES_DB: anvil_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anvil_test -d anvil_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://anvil_test:anvil_test@localhost:5432/anvil_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Apply queue migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_anvil_queue.sql
+      - name: Verify idempotency, leases, retries, and recovery
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/sql/test_anvil_queue.sql
