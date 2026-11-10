@@ -37,6 +37,21 @@ def test_odds_missing_composite_key_is_reported() -> None:
 
     assert result["null_odds_unique_key_rows"] == 1
 
+def test_equivalent_odds_timestamps_are_normalized_before_duplicate_check() -> None:
+    """Detect duplicate odds identities expressed with equivalent UTC timestamps."""
+    frame = pd.DataFrame(
+        [
+            {"fixture_id": 10, "bookmaker": "A", "source": "feed", "known_at": "2026-01-01T10:00:00Z"},
+            {"fixture_id": 10, "bookmaker": "A", "source": "feed", "known_at": "2026-01-01 11:00:00+01:00"},
+        ]
+    )
+
+    result = odds_identity_metrics(frame)
+
+    assert result["duplicate_odds_key_rows"] == 1
+
+
+
 
 def test_pre_match_odds_require_timestamp_strictly_before_kickoff() -> None:
     """Exclude odds known at kickoff or later from pre-match inputs."""
