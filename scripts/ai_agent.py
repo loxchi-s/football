@@ -28,6 +28,8 @@ def fail(message: str) -> None:
 def allowed_path(raw_path: str) -> Path:
     if not raw_path or "\\" in raw_path or raw_path.startswith("/"):
         fail(f"Rejected unsafe path: {raw_path!r}")
+    if any(ord(char) < 32 or ord(char) == 127 for char in raw_path):
+        fail("Control characters are not allowed in file paths.")
     path = Path(raw_path)
     if path.is_absolute() or ".." in path.parts or path.as_posix() != raw_path:
         fail(f"Rejected unsafe path: {raw_path!r}")
@@ -39,6 +41,11 @@ def allowed_path(raw_path: str) -> Path:
     if normalized == "scripts/ai_agent.py":
         fail("The agent's own policy code is protected.")
     root = Path.cwd().resolve()
+    candidate = root
+    for part in path.parts:
+        candidate = candidate / part
+        if candidate.is_symlink():
+            fail(f"Symbolic links are not writable by the agent: {normalized}")
     resolved = (root / path).resolve()
     if root not in resolved.parents:
         fail(f"Path resolves outside the repository: {normalized}")
