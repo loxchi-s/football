@@ -127,3 +127,26 @@ def test_orphan_id_rows_excludes_nulls_and_detects_unknown_ids() -> None:
     ids = pd.Series([10, 20, None, 30])
 
     assert orphan_id_rows(ids, {10, 20}) == 1
+
+def test_empty_selected_fixture_scope_is_not_reported_as_review_required(tmp_path, monkeypatch) -> None:
+    """Fail closed when the source selection produces no fixtures."""
+    from scripts import audit_hf_staging
+
+    monkeypatch.setattr(audit_hf_staging, "OUT", tmp_path)
+    pd.DataFrame(
+        columns=["hf_fixture_id", "kickoff_utc", "league", "home_team", "away_team",
+                 "goals_home", "goals_away", "btts"]
+    ).to_csv(tmp_path / "matches_delta.csv", index=False)
+    pd.DataFrame(columns=["hf_fixture_id", "kickoff_utc"]).to_csv(
+        tmp_path / "fixture_scope.csv", index=False
+    )
+    pd.DataFrame(columns=["fixture_id", "known_at"]).to_csv(
+        tmp_path / "match_stats_delta.csv", index=False
+    )
+    pd.DataFrame(columns=["fixture_id", "known_at", "home_win", "draw", "away_win",
+                          "bookmaker", "source"]).to_csv(tmp_path / "odds_delta.csv", index=False)
+
+    assert audit_hf_staging.main() == 1
+    report = __import__("json").loads((tmp_path / "data_completeness_audit.json").read_text())
+    assert report["status"] == "FAIL"
+    assert "selected fixture scope is empty" in report["hard_failures"]
