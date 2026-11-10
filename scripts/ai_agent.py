@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import subprocess
 import time
@@ -10,14 +11,16 @@ from pathlib import Path
 from google import genai
 from google.genai import errors, types
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+SUPPORTED_MODELS = {"gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"}
+DEFAULT_FALLBACK_MODELS = ("gemini-3.6-flash", "gemini-3.1-flash-lite")
+MAX_ATTEMPTS_PER_MODEL = 2
 MAX_TASK_CHARS = 4_000
 MAX_CONTEXT_CHARS = 80_000
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_FILES = 10
 MAX_FILE_BYTES = 60_000
 GEMINI_TIMEOUT_SECONDS = 90
-GEMINI_MAX_ATTEMPTS = 3
 GEMINI_RETRYABLE_HTTP_CODES = {408, 500, 502, 503, 504}
 GEMINI_PERMANENT_HTTP_CODES = {400, 401, 403, 404, 429}
 ALLOWED_ROOTS = ("scripts/", "tests/", "docs/")
@@ -126,6 +129,22 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
         response_mime_type="application/json",
         response_schema=schema,
     )
+    primary_model = os.getenv("GEMINI_MODEL", MODEL).strip()
+    fallback_setting = os.getenv(
+        "GEMINI_FALLBACK_MODELS", ",".join(DEFAULT_FALLBACK_MODELS)
+    )
+    models: list[str] = []
+    for candidate in [primary_model, *fallback_setting.split(",")]:
+        candidate = candidate.strip()
+        if not candidate:
+            continue
+        if candidate not in SUPPORTED_MODELS:
+            fail(f"Model is not in the approved Free Tier allowlist: {candidate}")
+        if candidate not in models:
+            models.append(candidate)
+    if not models:
+        fail("No Gemini models are configured.")
+
     client = genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
@@ -134,57 +153,72 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
         ),
     )
     response_text = ""
+    selected_model = ""
     try:
-        for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
-            try:
-                response = client.models.generate_content(
-                    model=MODEL,
-                    contents=instructions,
-                    config=config,
-                )
-                response_text = response.text or ""
-                break
-            except errors.APIError as exc:
-                status = exc.code
-                if status in GEMINI_PERMANENT_HTTP_CODES:
-                    fail(
-                        f"Gemini API rejected the request (HTTP {status}). "
-                        "Check the API key, model access, request schema, and Free Tier quota. "
-                        "No paid fallback is configured."
+        for model_index, candidate_model in enumerate(models):
+            for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
+                try:
+                    response = client.models.generate_content(
+                        model=candidate_model,
+                        contents=instructions,
+                        config=config,
                     )
-                if status is not None and status not in GEMINI_RETRYABLE_HTTP_CODES:
-                    fail(
-                        f"Gemini API failed with HTTP {status} after {attempt} attempt(s). "
-                        "No paid fallback is configured."
+                    response_text = response.text or ""
+                    selected_model = candidate_model
+                    break
+                except errors.APIError as exc:
+                    status = exc.code
+                    if status in GEMINI_PERMANENT_HTTP_CODES:
+                        fail(
+                            f"Gemini API rejected the request (HTTP {status}). "
+                            "Check the API key, model access, request schema, and Free Tier quota. "
+                            "No paid fallback is configured."
+                        )
+                    if status not in GEMINI_RETRYABLE_HTTP_CODES:
+                        fail(
+                            f"Gemini API failed with HTTP {status} after {attempt} attempt(s). "
+                            "No paid fallback is configured."
+                        )
+                    if attempt < MAX_ATTEMPTS_PER_MODEL:
+                        delay = min(2 ** (attempt - 1) * 2, 8) + random.uniform(0, 1)
+                        print(
+                            f"Gemini model {candidate_model} returned HTTP {status}; "
+                            f"retrying in {delay:.1f}s ({attempt}/{MAX_ATTEMPTS_PER_MODEL - 1})."
+                        )
+                        time.sleep(delay)
+                        continue
+                    print(
+                        f"Gemini model {candidate_model} unavailable after "
+                        f"{MAX_ATTEMPTS_PER_MODEL} attempts (HTTP {status})."
                     )
-                if attempt == GEMINI_MAX_ATTEMPTS:
-                    fail(
-                        f"Gemini API transport/server error after {attempt} attempts. "
-                        "Check runner network/DNS/TLS and Google API availability. "
-                        "No paid fallback is configured."
-                    )
-                print(
-                    f"Gemini API transient error ({'connection' if status is None else status}); "
-                    f"retrying ({attempt}/{GEMINI_MAX_ATTEMPTS - 1})."
-                )
-            except (TimeoutError, ConnectionError, OSError) as exc:
-                if attempt == GEMINI_MAX_ATTEMPTS:
+                except (TimeoutError, ConnectionError, OSError) as exc:
+                    if attempt < MAX_ATTEMPTS_PER_MODEL:
+                        delay = min(2 ** (attempt - 1) * 2, 8) + random.uniform(0, 1)
+                        print(
+                            f"Gemini connection issue ({type(exc).__name__}); "
+                            f"retrying in {delay:.1f}s ({attempt}/{MAX_ATTEMPTS_PER_MODEL - 1})."
+                        )
+                        time.sleep(delay)
+                        continue
                     fail(
                         f"Gemini API connection failed after {attempt} attempts "
                         f"({type(exc).__name__}). Check runner network/DNS/TLS. "
                         "No paid fallback is configured."
                     )
-                print(
-                    f"Gemini API connection issue ({type(exc).__name__}); "
-                    f"retrying ({attempt}/{GEMINI_MAX_ATTEMPTS - 1})."
-                )
-            if attempt < GEMINI_MAX_ATTEMPTS:
-                time.sleep(min(2 ** (attempt - 1) * 5, 20))
+            if response_text:
+                break
+            if model_index + 1 < len(models):
+                print(f"Trying configured Free Tier fallback model: {models[model_index + 1]}")
     finally:
         client.close()
 
     if not response_text:
-        fail("Gemini API returned an empty response. No paid fallback is configured.")
+        fail(
+            f"All configured Gemini models were unavailable after transient server errors: "
+            f"{', '.join(models)}. No paid fallback is configured."
+        )
+    print(f"Gemini model used: {selected_model}")
+
     if len(response_text.encode("utf-8")) > MAX_RESPONSE_BYTES:
         fail("Gemini response exceeded the configured size limit.")
     try:
