@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -56,7 +56,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://anvil_test:anvil_test@localhost:5432/anvil_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
