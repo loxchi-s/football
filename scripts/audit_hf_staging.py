@@ -53,6 +53,10 @@ def season_label(value: object) -> str | None:
     year = value.year
     return f"{year}-{year + 1}" if value.month >= 7 else f"{year - 1}-{year}"
 
+def orphan_id_rows(ids: pd.Series, allowed_ids: set[object]) -> int:
+    """Count non-null IDs that are absent from the authoritative fixture scope."""
+    return int((ids.notna() & ~ids.isin(allowed_ids)).sum())
+
 
 def timestamp_metrics(frame: pd.DataFrame, fixtures: pd.DataFrame, table: str) -> dict[str, int | str]:
     """Compare each row's known_at timestamp with its fixture kickoff."""
@@ -151,6 +155,8 @@ def main() -> int:
         "invalid_match_kickoff_rows": int(matches["kickoff_utc"].isna().sum()),
         "selected_fixture_scope_rows": int(len(fixture_scope)),
         "selected_fixture_scope_unique_ids": int(fixture_scope["hf_fixture_id"].nunique()),
+        "invalid_fixture_scope_kickoff_rows": int(fixture_scope["kickoff_utc"].isna().sum()),
+        "orphan_match_rows": orphan_id_rows(matches["hf_fixture_id"], fixture_ids),
         "missing_rates": {
             "matches": null_rates(matches, IMPORTANT_MATCH_FIELDS),
             "match_stats": null_rates(stats, IMPORTANT_STATS_FIELDS),
@@ -211,6 +217,14 @@ def main() -> int:
         hard_failures.append("null selected fixture IDs")
     if fixture_scope["hf_fixture_id"].duplicated().any():
         hard_failures.append("duplicate selected fixture IDs")
+    if report["invalid_fixture_scope_kickoff_rows"]:
+        hard_failures.append("invalid selected fixture kickoff timestamps")
+    if report["orphan_match_rows"]:
+        hard_failures.append("matches outside selected fixture scope")
+
+    stats_temporal = report["temporal_checks"].get("match_stats", {})
+    if stats_temporal.get("rows_with_known_at_before_kickoff", 0):
+        hard_failures.append("match_stats known_at before kickoff")
 
     for table, metrics in report["tables"].items():
         if metrics.get("missing_fixture_id_column"):
