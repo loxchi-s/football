@@ -17,12 +17,17 @@ LEAGUE_NAMES = {
     9: "Ligue 1",
     11: "Bundesliga",
 }
-BASE_URL = f"https://huggingface.co/datasets/{REPO_ID}/blob/main/"
+BASE_URL = f"https://huggingface.co/datasets/{REPO_ID}/blob/"
 
 
-def download_table(name: str) -> pd.DataFrame:
-    """Download one Parquet table from the configured Hugging Face dataset."""
-    path = hf_hub_download(repo_id=REPO_ID, repo_type="dataset", filename=f"{name}.parquet")
+def download_table(name: str, revision: str) -> pd.DataFrame:
+    """Download one Parquet table pinned to the audited dataset revision."""
+    path = hf_hub_download(
+        repo_id=REPO_ID,
+        repo_type="dataset",
+        filename=f"{name}.parquet",
+        revision=revision,
+    )
     return pd.read_parquet(path)
 
 
@@ -41,11 +46,12 @@ def main() -> None:
     revision = info.sha
     last_modified = info.last_modified.isoformat() if info.last_modified else None
 
-    leagues = download_table("leagues")
-    fixtures = download_table("fixtures")
-    teams = download_table("teams")
-    stats = download_table("match_stats")
-    odds = download_table("odds")
+    source_url = BASE_URL + revision + "/"
+    leagues = download_table("leagues", revision)
+    fixtures = download_table("fixtures", revision)
+    teams = download_table("teams", revision)
+    stats = download_table("match_stats", revision)
+    odds = download_table("odds", revision)
 
     require_columns(leagues, "leagues", {"id", "name", "country"})
     require_columns(fixtures, "fixtures", {
@@ -88,7 +94,7 @@ def main() -> None:
         "btts",
     ]].rename(columns={"id": "hf_fixture_id", "date_utc": "kickoff_utc"})
     matches["source_dataset"] = REPO_ID
-    matches["source_url"] = BASE_URL + "fixtures.parquet"
+    matches["source_url"] = source_url + "fixtures.parquet"
     matches["source_revision"] = revision
     matches["stable_key_note"] = "Use hf_fixture_id as source key; do not overwrite existing Master match_id."
 
@@ -102,13 +108,13 @@ def main() -> None:
 
     stats_delta = stats[stats["fixture_id"].isin(selected["id"])].copy()
     stats_delta["source_dataset"] = REPO_ID
-    stats_delta["source_url"] = BASE_URL + "match_stats.parquet"
+    stats_delta["source_url"] = source_url + "match_stats.parquet"
     stats_delta["source_revision"] = revision
     stats_delta["usage_guard"] = "POST_MATCH_ONLY: known_at must be at/after kickoff; never use as pre-match predictor."
 
     odds_delta = odds[odds["fixture_id"].isin(selected["id"])].copy()
     odds_delta["source_dataset"] = REPO_ID
-    odds_delta["source_url"] = BASE_URL + "odds.parquet"
+    odds_delta["source_url"] = source_url + "odds.parquet"
     odds_delta["source_revision"] = revision
     odds_delta["usage_guard"] = "PRE_MATCH_ELIGIBLE_ONLY_WHEN: known_at is parseable and strictly before kickoff."
 
@@ -135,10 +141,10 @@ def main() -> None:
         "duplicate_hf_fixture_ids": int(matches["hf_fixture_id"].duplicated().sum()),
         "note": "Staging only. Master workbook is not included in this public repository and is not modified by this workflow.",
         "files": {
-            "matches_delta.csv": BASE_URL + "fixtures.parquet",
-            "fixture_scope.csv": BASE_URL + "fixtures.parquet",
-            "match_stats_delta.csv": BASE_URL + "match_stats.parquet",
-            "odds_delta.csv": BASE_URL + "odds.parquet",
+            "matches_delta.csv": source_url + "fixtures.parquet",
+            "fixture_scope.csv": source_url + "fixtures.parquet",
+            "match_stats_delta.csv": source_url + "match_stats.parquet",
+            "odds_delta.csv": source_url + "odds.parquet",
         },
     }
     payload = json.dumps(audit, ensure_ascii=False, indent=2, allow_nan=False)
