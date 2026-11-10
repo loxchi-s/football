@@ -21,7 +21,7 @@ The manual `Hugging Face football data staging` workflow:
 - Child-row orphan checks against the full selected fixture scope, not only played matches.
 - Post-match statistics with a `known_at` timestamp before kickoff fail the audit.
 - `match_stats`: one row per fixture ID; duplicate fixture IDs fail.
-- `odds`: multiple rows per fixture are valid. Uniqueness is checked using `fixture_id + bookmaker + source + known_at`; exact duplicate rows and incomplete composite keys fail.
+- `odds`: multiple rows per fixture are valid. Uniqueness is checked using `fixture_id + bookmaker + source` (matching the upstream dataset deduplication key); exact duplicate rows and incomplete composite keys fail.
 - Null counts/rates for selected important fields; absent columns are explicitly reported.
 - Timestamp comparability against the kickoff timestamp from the full fixture scope.
 - No null imputation: missing values remain missing.
