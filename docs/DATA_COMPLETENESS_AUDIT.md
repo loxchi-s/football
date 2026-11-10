@@ -8,7 +8,7 @@ Run structural and descriptive quality checks against the five-league CSV stagin
 
 The manual `Hugging Face football data staging` workflow:
 
-1. Downloads five source tables: `leagues`, `fixtures`, `teams`, `match_stats`, and `odds`.
+1. Resolves the dataset commit SHA and downloads all five source tables pinned to that immutable revision: `leagues`, `fixtures`, `teams`, `match_stats`, and `odds`.
 2. Writes four CSV files: `matches_delta.csv` (played fixtures), `fixture_scope.csv` (all selected fixtures, including unplayed fixtures), `match_stats_delta.csv`, and `odds_delta.csv`.
 3. Runs `scripts/audit_hf_staging.py` to produce `data_completeness_audit.json`.
 4. Attempts artifact upload even when ingestion or audit fails, so partial diagnostics remain available. The job still fails when the audit step fails.
@@ -17,6 +17,7 @@ The manual `Hugging Face football data staging` workflow:
 
 - Played-match counts grouped by league and derived season (July–June boundary).
 - Stable fixture ID nulls and duplicates; match rows must be a subset of the full selected fixture scope.
+- Selected fixture scope and played-match staging must not be empty.
 - Selected fixture kickoff timestamps must parse successfully.
 - Child-row orphan checks against the full selected fixture scope, not only played matches.
 - Post-match statistics with a `known_at` timestamp before kickoff fail the audit.
@@ -35,7 +36,7 @@ The manual `Hugging Face football data staging` workflow:
 
 ## Status semantics
 
-- `FAIL`: null/duplicate stable match IDs, invalid match or selected-fixture kickoff, invalid selected fixture IDs, match rows outside fixture scope, missing child fixture key, null/orphan child IDs, pre-kickoff match_stats timestamps, duplicate match_stats fixture IDs, or duplicate/incomplete odds composite keys.
+- `FAIL`: empty selected fixture scope or empty played-match staging, null/duplicate stable match IDs, invalid match or selected-fixture kickoff, invalid selected fixture IDs, match rows outside fixture scope, missing child fixture key, null/orphan child IDs, pre-kickoff match_stats timestamps, duplicate match_stats fixture IDs, or duplicate/incomplete odds composite keys.
 - `REVIEW_REQUIRED`: structural checks pass, but no trusted expected-count baseline exists to prove per-season completeness. This is not a PASS.
 
 ## Known limitations
