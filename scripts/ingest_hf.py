@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
-
 from huggingface_hub import HfApi, hf_hub_download
 
 REPO_ID = "eatpizzanot/soccer-dataset"
