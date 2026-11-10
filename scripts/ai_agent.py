@@ -4,7 +4,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -117,9 +116,9 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
     }
     url = f"{API_ROOT}/{urllib.parse.quote(MODEL, safe='')}:generateContent"
     request = urllib.request.Request(
-        f"{url}?key={urllib.parse.quote(api_key, safe='')}",
+        url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         method="POST",
     )
     try:
