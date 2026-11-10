@@ -84,6 +84,24 @@ def timestamp_metrics(frame: pd.DataFrame, fixtures: pd.DataFrame, table: str) -
     return result
 
 
+def odds_identity_metrics(frame: pd.DataFrame) -> dict[str, int | list[str]]:
+    """Measure odds uniqueness without treating valid multi-bookmaker rows as duplicates."""
+    missing_columns = [column for column in ODDS_UNIQUE_KEY if column not in frame.columns]
+    metrics: dict[str, int | list[str]] = {
+        "odds_unique_key": ODDS_UNIQUE_KEY,
+        "missing_odds_key_columns": missing_columns,
+        "exact_duplicate_rows": int(frame.duplicated().sum()),
+    }
+    if missing_columns:
+        return metrics
+    complete_key = frame[ODDS_UNIQUE_KEY].notna().all(axis=1)
+    metrics["null_odds_unique_key_rows"] = int((~complete_key).sum())
+    metrics["duplicate_odds_key_rows"] = int(
+        frame.loc[complete_key].duplicated(subset=ODDS_UNIQUE_KEY).sum()
+    )
+    return metrics
+
+
 def main() -> int:
     """Audit staged rows, preserving valid multi-bookmaker odds and fixture scope."""
     matches = load_csv(MATCHES)
@@ -157,16 +175,7 @@ def main() -> int:
         if name == "match_stats":
             metrics["duplicate_fixture_id_rows"] = int(non_null_ids.duplicated().sum())
         else:
-            missing_key_columns = [column for column in ODDS_UNIQUE_KEY if column not in frame.columns]
-            metrics["odds_unique_key"] = ODDS_UNIQUE_KEY
-            metrics["missing_odds_key_columns"] = missing_key_columns
-            if not missing_key_columns:
-                complete_key = frame[ODDS_UNIQUE_KEY].notna().all(axis=1)
-                metrics["null_odds_unique_key_rows"] = int((~complete_key).sum())
-                metrics["duplicate_odds_key_rows"] = int(
-                    frame.loc[complete_key].duplicated(subset=ODDS_UNIQUE_KEY).sum()
-                )
-                metrics["exact_duplicate_rows"] = int(frame.duplicated().sum())
+            metrics.update(odds_identity_metrics(frame))
         report["tables"][name] = metrics
 
     for name, frame in (("match_stats", stats), ("odds", odds)):
