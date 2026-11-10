@@ -1,0 +1,67 @@
+import pandas as pd
+
+from scripts.audit_hf_staging import odds_identity_metrics, timestamp_metrics
+
+
+def test_odds_from_multiple_bookmakers_are_not_duplicates() -> None:
+    frame = pd.DataFrame(
+        [
+            {"fixture_id": 10, "bookmaker": "A", "source": "feed", "known_at": "2026-01-01T10:00:00Z"},
+            {"fixture_id": 10, "bookmaker": "B", "source": "feed", "known_at": "2026-01-01T10:00:00Z"},
+        ]
+    )
+
+    result = odds_identity_metrics(frame)
+
+    assert result["duplicate_odds_key_rows"] == 0
+    assert result["exact_duplicate_rows"] == 0
+
+
+def test_duplicate_odds_composite_key_is_detected() -> None:
+    row = {"fixture_id": 10, "bookmaker": "A", "source": "feed", "known_at": "2026-01-01T10:00:00Z"}
+    result = odds_identity_metrics(pd.DataFrame([row, row]))
+
+    assert result["duplicate_odds_key_rows"] == 1
+    assert result["exact_duplicate_rows"] == 1
+
+
+def test_odds_missing_composite_key_is_reported() -> None:
+    frame = pd.DataFrame(
+        [{"fixture_id": 10, "bookmaker": None, "source": "feed", "known_at": "2026-01-01T10:00:00Z"}]
+    )
+
+    result = odds_identity_metrics(frame)
+
+    assert result["null_odds_unique_key_rows"] == 1
+
+
+def test_pre_match_odds_require_timestamp_strictly_before_kickoff() -> None:
+    fixtures = pd.DataFrame(
+        [{"hf_fixture_id": 10, "kickoff_utc": pd.Timestamp("2026-01-01T12:00:00Z")}]
+    )
+    odds = pd.DataFrame(
+        [
+            {"fixture_id": 10, "known_at": "2026-01-01T11:59:00Z"},
+            {"fixture_id": 10, "known_at": "2026-01-01T12:00:00Z"},
+            {"fixture_id": 10, "known_at": "2026-01-01T12:01:00Z"},
+        ]
+    )
+
+    result = timestamp_metrics(odds, fixtures, "odds")
+
+    assert result["pre_match_eligible_rows"] == 1
+    assert result["rows_with_known_at_at_or_after_kickoff"] == 2
+
+
+def test_match_stats_are_never_pre_match_features() -> None:
+    fixtures = pd.DataFrame(
+        [{"hf_fixture_id": 10, "kickoff_utc": pd.Timestamp("2026-01-01T12:00:00Z")}]
+    )
+    stats = pd.DataFrame(
+        [{"fixture_id": 10, "known_at": "2026-01-01T13:45:00Z"}]
+    )
+
+    result = timestamp_metrics(stats, fixtures, "match_stats")
+
+    assert result["pre_match_eligible_rows"] == 0
+    assert result["usage_classification"] == "POST_MATCH_ONLY"
