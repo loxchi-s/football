@@ -72,6 +72,24 @@ def test_pre_match_odds_require_timestamp_strictly_before_kickoff() -> None:
     assert result["rows_with_known_at_at_or_after_kickoff"] == 2
 
 
+def test_timestamp_metrics_parse_mixed_timezone_formats() -> None:
+    """Parse equivalent timestamps with mixed UTC offset representations."""
+    fixtures = pd.DataFrame(
+        [{"hf_fixture_id": 10, "kickoff_utc": pd.Timestamp("2026-01-01T12:00:00Z")}]
+    )
+    odds = pd.DataFrame(
+        [
+            {"fixture_id": 10, "known_at": "2026-01-01T10:00:00Z"},
+            {"fixture_id": 10, "known_at": "2026-01-01 11:00:00+01:00"},
+        ]
+    )
+
+    result = timestamp_metrics(odds, fixtures, "odds")
+
+    assert result["rows_with_known_at_before_kickoff"] == 2
+    assert result["known_at_unparseable_rows"] == 0
+
+
 def test_match_stats_are_never_pre_match_features() -> None:
     """Classify match statistics as post-match-only observations."""
     fixtures = pd.DataFrame(
