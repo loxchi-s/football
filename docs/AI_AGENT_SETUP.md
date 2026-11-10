@@ -36,7 +36,7 @@
 ## API connectivity smoke test
 
 - Run **GitHub Actions → Gemini API Smoke Test → Run workflow** to test the API without invoking the coding agent.
-- Select `gemini-3.8-flash` (default) or `gemini-3.8-flash`.
+- Select `gemini-3.8-flash` (default), `gemini-3.6-flash`, or `gemini-3.1-flash-lite`.
 - This workflow only makes one structured JSON generation request. It has read-only repository permission, does not modify files, create artifacts, create branches, or open pull requests.
 - A successful run confirms API access for the selected model at that time; it does not guarantee future quota or availability.
 
