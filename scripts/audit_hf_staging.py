@@ -22,7 +22,7 @@ IMPORTANT_STATS_FIELDS = [
 IMPORTANT_ODDS_FIELDS = [
     "fixture_id", "known_at", "home_win", "draw", "away_win",
 ]
-ODDS_UNIQUE_KEY = ["fixture_id", "bookmaker", "source", "known_at"]
+ODDS_UNIQUE_KEY = ["fixture_id", "bookmaker", "source"]
 
 
 def load_csv(path: Path) -> pd.DataFrame:
@@ -109,17 +109,8 @@ def odds_identity_metrics(frame: pd.DataFrame) -> dict[str, int | list[str]]:
     complete_key = frame[ODDS_UNIQUE_KEY].notna().all(axis=1)
     metrics["null_odds_unique_key_rows"] = int((~complete_key).sum())
 
-    # Normalize equivalent timestamp representations to UTC before key comparison.
-    key_frame = frame.loc[complete_key, ODDS_UNIQUE_KEY].copy()
-    parsed_known_at = pd.to_datetime(key_frame["known_at"], format="mixed", utc=True, errors="coerce")
-    canonical_known_at = key_frame["known_at"].astype("string").copy()
-    valid_timestamps = parsed_known_at.notna()
-    canonical_known_at.loc[valid_timestamps] = parsed_known_at.loc[valid_timestamps].map(
-        lambda timestamp: timestamp.isoformat()
-    )
-    key_frame["known_at"] = canonical_known_at
     metrics["duplicate_odds_key_rows"] = int(
-        key_frame.duplicated(subset=ODDS_UNIQUE_KEY).sum()
+        frame.loc[complete_key].duplicated(subset=ODDS_UNIQUE_KEY).sum()
     )
     return metrics
 
