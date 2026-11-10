@@ -4,7 +4,7 @@
 
 - Trigger manually from GitHub Actions → Gemini Free AI Coding Agent → Run workflow.
 - Runs on the GitHub-hosted `ubuntu-latest` standard runner; no GPU or local machine is used.
-- Uses Google Gemini Developer API model `gemini-3.8-flash`, currently listed with free input/output pricing.
+- Uses Google Gemini Developer API model `gemini-3.5-flash-lite`, currently listed with free input/output pricing.
 - Requires the repository Actions secret `GEMINI_API_KEY`.
 - The workflow stops on missing key, quota/rate limit, or API failure. There is no paid fallback.
 - The workflow is split into two isolated jobs: generation/validation has read-only repository permission; publishing runs on a fresh runner with write permission and never executes generated code.
@@ -31,3 +31,11 @@
 - Free-tier quota is limited and can change. HTTP 403/429 or quota errors stop the run; no paid model fallback exists.
 - Google states that free-tier content may be used to improve its products. Submit only public, non-sensitive code and task details.
 - A free model tier does not guarantee uninterrupted availability or a fixed request quota.
+
+
+## API connectivity smoke test
+
+- Run **GitHub Actions → Gemini API Smoke Test → Run workflow** to test the API without invoking the coding agent.
+- Select `gemini-3.5-flash-lite` (default) or `gemini-3.8-flash`.
+- This workflow only makes one structured JSON generation request. It has read-only repository permission, does not modify files, create artifacts, create branches, or open pull requests.
+- A successful run confirms API access for the selected model at that time; it does not guarantee future quota or availability.

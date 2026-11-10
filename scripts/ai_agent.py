@@ -10,7 +10,7 @@ from pathlib import Path
 from google import genai
 from google.genai import errors, types
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 MAX_TASK_CHARS = 4_000
 MAX_CONTEXT_CHARS = 80_000
 MAX_RESPONSE_BYTES = 1_000_000
