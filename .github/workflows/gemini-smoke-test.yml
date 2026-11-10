@@ -4,13 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: "Gemini model to test"
+        description: "Gemini or Gemma model to test on the Free Tier"
         required: true
         type: choice
         options:
           - gemini-3.8-flash
           - gemini-3.6-flash
           - gemini-3.1-flash-lite
+          - gemma-4-26b-a4b-it
+          - gemma-4-31b-it
         default: gemini-3.8-flash
 
 permissions:
@@ -35,7 +37,7 @@ jobs:
       - name: Install Gemini SDK
         run: python -m pip install --disable-pip-version-check "google-genai>=1.0,<2"
 
-      - name: Test Gemini API and JSON response
+      - name: Test selected model and structured JSON response
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ inputs.model }}
@@ -80,9 +82,9 @@ jobs:
                   raise ValueError("JSON response did not contain status=ok")
               print(f"Model: {model}")
               print("API request: successful")
-              print("JSON response: valid")
+              print("Structured JSON response: valid")
           except Exception as exc:
-              print(f"::error::Gemini smoke test failed: {type(exc).__name__}: {exc}")
+              print(f"::error::Model smoke test failed: {type(exc).__name__}: {exc}")
               raise
           finally:
               client.close()

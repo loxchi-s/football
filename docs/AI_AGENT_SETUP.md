@@ -32,18 +32,20 @@
 - Google states that free-tier content may be used to improve its products. Submit only public, non-sensitive code and task details.
 - A free model tier does not guarantee uninterrupted availability or a fixed request quota.
 
-
 ## API connectivity smoke test
 
 - Run **GitHub Actions → Gemini API Smoke Test → Run workflow** to test the API without invoking the coding agent.
-- Select `gemini-3.8-flash` (default), `gemini-3.6-flash`, or `gemini-3.1-flash-lite`.
-- This workflow only makes one structured JSON generation request. It has read-only repository permission, does not modify files, create artifacts, create branches, or open pull requests.
-- A successful run confirms API access for the selected model at that time; it does not guarantee future quota or availability.
+- Select `gemini-3.8-flash` (default), `gemini-3.6-flash`, `gemini-3.1-flash-lite`, `gemma-4-26b-a4b-it`, or `gemma-4-31b-it`.
+- Google documents hosted Gemini API access and Free Tier input/output pricing for Gemma 4. The two API model IDs are `gemma-4-26b-a4b-it` and `gemma-4-31b-it`.
+- The workflow makes one structured JSON generation request. For Gemma 4, this also checks whether the model accepts the structured-output configuration required by this coding agent. A failure means do not add that model to the agent fallback chain.
+- It has read-only repository permission, does not modify files, create artifacts, create branches, or open pull requests.
+- A successful run confirms API access and structured JSON compatibility for the selected model at that time; it does not guarantee future quota or availability.
 
 ## Multi-model routing
 
-- The coding agent uses a fixed, reviewed Free Tier model allowlist: gemini-3.8-flash (primary), gemini-3.6-flash, and gemini-3.1-flash-lite (fallback order).
-- Each model gets at most two attempts. Retry delays use exponential backoff plus jitter.
+- The coding agent currently uses a fixed, reviewed Free Tier model allowlist: gemini-3.8-flash (primary), gemini-3.6-flash, and gemini-3.1-flash-lite (fallback order).
+- Gemma 4 is not yet enabled in the coding agent. Run the isolated smoke test for `gemma-4-26b-a4b-it` first; only enable it after its structured JSON test succeeds.
+- Each configured agent model gets at most two attempts. Retry delays use exponential backoff plus jitter.
 - Fallback is only used after retryable server errors (HTTP 408/500/502/503/504). Authentication, invalid request, model access, and quota/rate-limit errors (400/401/403/404/429) stop immediately.
 - Network/DNS/TLS errors are retried against the same model; they do not trigger model fallback because they are not evidence of model-specific overload.
 - The smoke-test workflow tests exactly the selected model so its result identifies which model was actually checked.
