@@ -50,7 +50,7 @@ def main() -> None:
     require_columns(leagues, "leagues", {"id", "name", "country"})
     require_columns(fixtures, "fixtures", {
         "id", "date_utc", "league_id", "home_team_id", "away_team_id",
-        "goals_home", "goals_away", "status_norm", "is_played",
+        "goals_home", "goals_away", "status_norm", "is_played", "btts",
     })
     require_columns(teams, "teams", {"id", "name"})
     require_columns(stats, "match_stats", {"fixture_id", "known_at"})
