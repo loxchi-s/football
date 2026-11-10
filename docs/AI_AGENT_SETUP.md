@@ -1,17 +1,32 @@
 # AI Coding Agent
 
-## Current repository automation
+## Execution model
 
-- GitHub Actions runs CI, Ruff, compilation, unit tests, and CodeQL.
-- Dependabot proposes dependency updates weekly.
-- Agent changes must be delivered through pull requests; never write directly to `main`.
-- Do not modify the Master workbook or production database from an agent workflow.
-- Do not put API keys, PATs, database URLs, or workbook files in git.
+- Trigger manually from GitHub Actions → Gemini Free AI Coding Agent → Run workflow.
+- Runs on the GitHub-hosted `ubuntu-latest` standard runner; no GPU or local machine is used.
+- Uses Google Gemini Developer API model `gemini-3.8-flash`, currently listed with free input/output pricing.
+- Requires the repository Actions secret `GEMINI_API_KEY`.
+- The workflow stops on missing key, quota/rate limit, or API failure. There is no paid fallback.
+- Every proposed change is checked with Ruff, compileall, and pytest before a branch and PR are created.
 
-## OpenHands activation is not yet configured
+## Data and permission boundaries
 
-OpenHands requires an LLM provider endpoint/key and GitHub write permissions to create branches and pull requests. The provider may incur charges; a free GitHub Actions runner does not make model inference free.
+- The agent receives only tracked text files under `scripts/`, `tests/`, `docs/`, and a small allowlist of root project configuration files.
+- It cannot change `.github/workflows/`, its own policy script, the Master workbook, or production database configuration.
+- No database credentials, workbook, or production data are passed to Gemini.
+- Agent changes are pushed to a new `ai-agent/run-<id>` branch and submitted as a PR. It cannot merge.
+- Review the generated diff before merging. The agent is not a substitute for code review.
 
-The older `All-Hands-AI/openhands-resolver` repository is archived, so this project does not install that unmaintained resolver. Configure a currently supported OpenHands SDK/hosted runner only after selecting a model endpoint and adding its secret through GitHub Settings → Secrets and variables → Actions.
+## One-time setup
 
-Never grant an agent unrestricted repository administration, secret access, or permission to bypass required checks.
+1. Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. Do not link Google Cloud Billing or upgrade to a paid tier.
+3. In GitHub, open Settings → Secrets and variables → Actions → New repository secret.
+4. Set the name to `GEMINI_API_KEY` and paste the key into the secret value field. Never paste it into chat, source files, or workflow inputs.
+5. In Settings → Actions → General, ensure GitHub Actions is allowed to create pull requests if PR creation is blocked.
+
+## Free-tier and privacy limits
+
+- Free-tier quota is limited and can change. HTTP 403/429 or quota errors stop the run; no paid model fallback exists.
+- Google states that free-tier content may be used to improve its products. Submit only public, non-sensitive code and task details.
+- A free model tier does not guarantee uninterrupted availability or a fixed request quota.
