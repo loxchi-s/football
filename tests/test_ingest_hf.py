@@ -37,3 +37,23 @@ def test_fixture_schema_requires_btts_label():
                 "goals_home", "goals_away", "status_norm", "is_played", "btts",
             },
         )
+
+def test_download_table_pins_huggingface_revision(monkeypatch):
+    calls = {}
+
+    def fake_download(**kwargs):
+        calls.update(kwargs)
+        return "/tmp/fixtures.parquet"
+
+    def fake_read_parquet(path):
+        return pd.DataFrame({"id": [1]})
+
+    monkeypatch.setattr("scripts.ingest_hf.hf_hub_download", fake_download)
+    monkeypatch.setattr("scripts.ingest_hf.pd.read_parquet", fake_read_parquet)
+
+    result = __import__("scripts.ingest_hf", fromlist=["download_table"]).download_table(
+        "fixtures", "immutable-revision"
+    )
+
+    assert calls["revision"] == "immutable-revision"
+    assert result["id"].tolist() == [1]
