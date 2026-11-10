@@ -56,6 +56,14 @@ def season_label(value: object) -> str | None:
 
 def timestamp_metrics(frame: pd.DataFrame, fixtures: pd.DataFrame, table: str) -> dict[str, int | str]:
     """Compare each row's known_at timestamp with its fixture kickoff."""
+    duplicate_scope_ids = int(fixtures["hf_fixture_id"].duplicated().sum())
+    if duplicate_scope_ids:
+        return {
+            "rows": int(len(frame)),
+            "duplicate_fixture_scope_ids": duplicate_scope_ids,
+            "temporal_check_status": "SKIPPED_INVALID_FIXTURE_SCOPE",
+        }
+
     joined = frame[["fixture_id", "known_at"]].merge(
         fixtures[["hf_fixture_id", "kickoff_utc"]],
         left_on="fixture_id",
