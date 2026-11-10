@@ -183,7 +183,7 @@ def main() -> None:
     task = os.getenv("AGENT_TASK", "").strip()
     if not task or len(task) > MAX_TASK_CHARS:
         fail(f"AGENT_TASK must contain 1–{MAX_TASK_CHARS} characters.")
-    if re.search(r"(?i)(api[_ -]?key|password|secret)\\s*[:=]", task):
+    if re.search(r"(?i)(api[_ -]?key|password|secret)\s*[:=]", task):
         fail("Task appears to contain a credential. Do not submit secrets to the agent.")
     files = read_context()
     result = call_gemini(task, files)
