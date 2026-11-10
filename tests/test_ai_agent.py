@@ -45,12 +45,13 @@ def test_allowed_path_rejects_control_characters(path):
 
 
 def _install_fake_client(monkeypatch, responses):
-    state = {"calls": 0, "closed": False, "kwargs": None}
+    state = {"calls": 0, "closed": False, "kwargs": None, "models": []}
 
     class FakeModels:
         def generate_content(self, **kwargs):
             state["calls"] += 1
             state["kwargs"] = kwargs
+            state["models"].append(kwargs["model"])
             item = responses.pop(0)
             if isinstance(item, BaseException):
                 raise item
@@ -141,3 +142,42 @@ def test_gemini_retries_transient_api_error(monkeypatch):
     assert result["files"] == []
     assert state["calls"] == 2
     assert state["closed"] is True
+
+
+
+def test_gemini_falls_back_after_repeated_503(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("GEMINI_FALLBACK_MODELS", "gemini-3.6-flash")
+    
+    class FakeAPIError(Exception):
+        code = 503
+
+    monkeypatch.setattr(ai_agent.errors, "APIError", FakeAPIError)
+    state = _install_fake_client(
+        monkeypatch,
+        [
+            FakeAPIError("overloaded"),
+            FakeAPIError("still overloaded"),
+            _response({"summary": "fallback ok", "files": []}),
+        ],
+    )
+    monkeypatch.setattr(ai_agent.time, "sleep", lambda _seconds: None)
+
+    result = ai_agent.call_gemini("Run a safe check", [])
+
+    assert result["summary"] == "fallback ok"
+    assert state["models"] == [
+        "gemini-3.8-flash",
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+    ]
+    assert state["closed"] is True
+
+
+def test_gemini_rejects_model_outside_free_tier_allowlist(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MODEL", "unapproved-model")
+
+    with pytest.raises(SystemExit, match="allowlist"):
+        ai_agent.call_gemini("Run a safe check", [])
