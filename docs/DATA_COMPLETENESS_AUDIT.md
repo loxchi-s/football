@@ -2,39 +2,48 @@
 
 ## Purpose
 
-Run structural and descriptive quality checks against the five-league CSV staging output. This is an audit of the rows actually staged by `scripts/ingest_hf.py`; it is not proof that every historical fixture or season is present.
+Run structural and descriptive quality checks against the five-league CSV staging output. This audits the rows actually staged; it does not prove every historical fixture or season is present.
 
 ## Execution
 
-The manual `Hugging Face football data staging` workflow now runs:
+The manual `Hugging Face football data staging` workflow:
 
-1. `scripts/ingest_hf.py` to download and stage fixtures, match statistics and odds.
-2. `scripts/audit_hf_staging.py` to produce `output/data_completeness_audit.json`.
-3. Uploads the staging CSVs and audit JSON as the `football-hf-staging` artifact.
+1. Downloads five source tables: `leagues`, `fixtures`, `teams`, `match_stats`, and `odds`.
+2. Writes four CSV files: `matches_delta.csv` (played fixtures), `fixture_scope.csv` (all selected fixtures, including unplayed fixtures), `match_stats_delta.csv`, and `odds_delta.csv`.
+3. Runs `scripts/audit_hf_staging.py` to produce `data_completeness_audit.json`.
+4. Attempts artifact upload even when ingestion or audit fails, so partial diagnostics remain available. The job still fails when the audit step fails.
 
 ## Checks
 
 - Played-match counts grouped by league and derived season (July–June boundary).
-- Stable source fixture ID duplicates.
-- Duplicate and orphan `fixture_id` rows in match_stats and odds.
+- Stable fixture ID nulls and duplicates.
+- Child-row orphan checks against the full selected fixture scope, not only played matches.
+- `match_stats`: one row per fixture ID; duplicate fixture IDs fail.
+- `odds`: multiple rows per fixture are valid. Uniqueness is checked using `fixture_id + bookmaker + source + known_at`; exact duplicate rows and incomplete composite keys fail.
 - Null counts/rates for selected important fields; absent columns are explicitly reported.
-- Timestamp comparability and whether `known_at` is before or at/after kickoff.
+- Timestamp comparability against the kickoff timestamp from the full fixture scope.
 - No null imputation: missing values remain missing.
+
+## Timestamp and model-usage rules
+
+- `match_stats` is post-match data. It is never eligible as a pre-match predictor.
+- An odds row is eligible for pre-match pricing only when `known_at` parses successfully and is strictly earlier than kickoff.
+- Odds at or after kickoff, and odds with missing/unparseable timestamps, are excluded from pre-match EV/model inputs.
+- A run with zero pre-match-eligible odds is reported as a data limitation, not treated as a structural audit failure. It must not be interpreted as pre-match odds coverage.
 
 ## Status semantics
 
-- `FAIL`: duplicate stable IDs, duplicate child fixture IDs, orphan child rows, or missing child fixture key.
-- `REVIEW_REQUIRED`: structural checks pass, but no trusted expected-count baseline exists to prove per-season completeness.
+- `FAIL`: null/duplicate stable match IDs, invalid match kickoff, invalid selected fixture IDs, missing child fixture key, null/orphan child IDs, duplicate match_stats fixture IDs, or duplicate/incomplete odds composite keys.
+- `REVIEW_REQUIRED`: structural checks pass, but no trusted expected-count baseline exists to prove per-season completeness. This is not a PASS.
 
 ## Known limitations
 
-- Current ingestion stages only `leagues`, `fixtures`, `teams`, `match_stats` and `odds`.
+- The workflow stages only fixtures, match statistics and odds as analytical CSVs, plus the full fixture scope used for referential checks.
 - Player, lineup, event and xG-training tables are not yet staged.
 - Counts by league-season are descriptive. A complete coverage claim requires an authoritative expected fixture baseline and comparison by league-season.
 - This workflow is manual-only. It does not provide daily refresh.
 - It does not modify the canonical P-Model workbook.
-- `match_stats.known_at` is post-match and must not be used as a pre-match feature. Odds must be filtered by verified availability timestamp before pre-match EV use.
 
 ## Validation boundary
 
-The audit script is executed in GitHub Actions against the downloaded source snapshot. Until that workflow has completed successfully and its artifact has been inspected, no actual row-level completeness result is claimed.
+Static code and CI checks do not validate current source-data completeness. The manual workflow must run on this branch and its uploaded artifact must be inspected before reporting actual coverage or declaring the audit validated.
