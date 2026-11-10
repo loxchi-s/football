@@ -1,6 +1,6 @@
 import pandas as pd
 
-from scripts.audit_hf_staging import odds_identity_metrics, timestamp_metrics
+from scripts.audit_hf_staging import odds_identity_metrics, orphan_id_rows, timestamp_metrics
 
 
 def test_odds_from_multiple_bookmakers_are_not_duplicates() -> None:
@@ -102,3 +102,10 @@ def test_timestamp_metrics_skip_duplicate_fixture_scope_without_crashing() -> No
 
     assert result["duplicate_fixture_scope_ids"] == 1
     assert result["temporal_check_status"] == "SKIPPED_INVALID_FIXTURE_SCOPE"
+
+
+def test_orphan_id_rows_excludes_nulls_and_detects_unknown_ids() -> None:
+    """Count only populated IDs that are absent from the selected fixture scope."""
+    ids = pd.Series([10, 20, None, 30])
+
+    assert orphan_id_rows(ids, {10, 20}) == 1
