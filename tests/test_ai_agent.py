@@ -26,7 +26,6 @@ def test_allowed_path_rejects_paths_outside_policy(path):
         allowed_path(path)
 
 
-
 def test_allowed_path_rejects_symlinked_parent(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     outside = tmp_path / "outside"
@@ -45,37 +44,100 @@ def test_allowed_path_rejects_control_characters(path):
         allowed_path(path)
 
 
+def _install_fake_client(monkeypatch, responses):
+    state = {"calls": 0, "closed": False, "kwargs": None}
 
-def test_gemini_request_uses_supported_generation_config(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    response_body = {
-        "candidates": [
-            {"content": {"parts": [{"text": json.dumps({"summary": "ok", "files": []})}]}}
-        ]
-    }
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            state["calls"] += 1
+            state["kwargs"] = kwargs
+            item = responses.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            return item
 
+    class FakeClient:
+        def __init__(self, **kwargs):
+            state["client_kwargs"] = kwargs
+            self.models = FakeModels()
+
+        def close(self):
+            state["closed"] = True
+
+    monkeypatch.setattr(ai_agent.genai, "Client", FakeClient)
+    return state
+
+
+def _response(payload):
     class FakeResponse:
-        def __enter__(self):
-            return self
+        text = json.dumps(payload)
 
-        def __exit__(self, *_args):
-            return False
+    return FakeResponse()
 
-        def read(self, _limit):
-            return json.dumps(response_body).encode("utf-8")
 
-    captured = {}
+def test_gemini_uses_google_genai_sdk_and_json_schema(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    state = _install_fake_client(
+        monkeypatch, [_response({"summary": "ok", "files": []})]
+    )
 
-    def fake_urlopen(request, timeout):
-        captured["request"] = request
-        captured["timeout"] = timeout
-        return FakeResponse()
-
-    monkeypatch.setattr(ai_agent.urllib.request, "urlopen", fake_urlopen)
     result = ai_agent.call_gemini("Add a harmless unit test", [])
 
-    payload = json.loads(captured["request"].data)
+    assert result == {"summary": "ok", "files": []}
+    assert state["calls"] == 1
+    assert state["closed"] is True
+    assert state["client_kwargs"]["api_key"] == "test-key"
+    assert state["client_kwargs"]["http_options"].timeout == 90_000
+    assert state["kwargs"]["model"] == ai_agent.MODEL
+    assert state["kwargs"]["config"].response_mime_type == "application/json"
+
+
+def test_gemini_retries_transient_connection_errors(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    state = _install_fake_client(
+        monkeypatch,
+        [TimeoutError("temporary timeout"), ConnectionError("temporary network"), _response({"summary": "ok", "files": []})],
+    )
+    monkeypatch.setattr(ai_agent.time, "sleep", lambda _seconds: None)
+
+    result = ai_agent.call_gemini("Run a safe check", [])
+
     assert result["files"] == []
-    assert captured["timeout"] == 120
-    assert "temperature" not in payload["generationConfig"]
-    assert payload["generationConfig"]["responseMimeType"] == "application/json"
+    assert state["calls"] == 3
+    assert state["closed"] is True
+
+
+def test_gemini_stops_on_free_tier_quota_error(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    class FakeAPIError(Exception):
+        code = 429
+
+    monkeypatch.setattr(ai_agent.errors, "APIError", FakeAPIError)
+    state = _install_fake_client(monkeypatch, [FakeAPIError("quota")])
+
+    with pytest.raises(SystemExit, match="HTTP 429"):
+        ai_agent.call_gemini("Run a safe check", [])
+
+    assert state["calls"] == 1
+    assert state["closed"] is True
+
+
+def test_gemini_retries_transient_api_error(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    class FakeAPIError(Exception):
+        code = 503
+
+    monkeypatch.setattr(ai_agent.errors, "APIError", FakeAPIError)
+    state = _install_fake_client(
+        monkeypatch,
+        [FakeAPIError("temporarily unavailable"), _response({"summary": "ok", "files": []})],
+    )
+    monkeypatch.setattr(ai_agent.time, "sleep", lambda _seconds: None)
+
+    result = ai_agent.call_gemini("Run a safe check", [])
+
+    assert result["files"] == []
+    assert state["calls"] == 2
+    assert state["closed"] is True

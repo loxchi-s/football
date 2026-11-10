@@ -4,18 +4,22 @@ import json
 import os
 import re
 import subprocess
-import urllib.error
-import urllib.parse
-import urllib.request
+import time
 from pathlib import Path
 
+from google import genai
+from google.genai import errors, types
+
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 MAX_TASK_CHARS = 4_000
 MAX_CONTEXT_CHARS = 80_000
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_FILES = 10
 MAX_FILE_BYTES = 60_000
+GEMINI_TIMEOUT_SECONDS = 90
+GEMINI_MAX_ATTEMPTS = 3
+GEMINI_RETRYABLE_HTTP_CODES = {408, 500, 502, 503, 504}
+GEMINI_PERMANENT_HTTP_CODES = {400, 401, 403, 404, 429}
 ALLOWED_ROOTS = ("scripts/", "tests/", "docs/")
 ALLOWED_ROOT_FILES = {"README.md", "pyproject.toml", "requirements.txt", "requirements-dev.txt"}
 PROTECTED_PATHS = {".github", "scripts/ai_agent.py", "P-Model_5ลีก_walk_forward_v2_calibration_review.xlsx"}
@@ -85,6 +89,7 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         fail("Missing GEMINI_API_KEY. Add it in GitHub Settings → Secrets and variables → Actions.")
+
     schema = {
         "type": "OBJECT",
         "properties": {
@@ -116,41 +121,76 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
         "If the task is unsafe or outside scope, return an empty files array and explain why.\n\n"
         f"TASK:\n{task}\n\nREPOSITORY FILES:\n{json.dumps(files, ensure_ascii=False)}"
     )
-    payload = {
-        "contents": [{"parts": [{"text": instructions}]}],
-        "generationConfig": {
-            "maxOutputTokens": 16_000,
-            "responseMimeType": "application/json",
-            "responseSchema": schema,
-        },
-    }
-    url = f"{API_ROOT}/{urllib.parse.quote(MODEL, safe='')}:generateContent"
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
+    config = types.GenerateContentConfig(
+        max_output_tokens=16_000,
+        response_mime_type="application/json",
+        response_schema=schema,
     )
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(
+            timeout=GEMINI_TIMEOUT_SECONDS * 1_000,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
+    )
+    response_text = ""
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        if exc.code in (403, 429):
-            fail("Gemini Free Tier quota/access limit reached. Stopped; no paid fallback is configured.")
-        fail(f"Gemini API request failed with HTTP {exc.code}. No paid fallback is configured.")
-    except (TimeoutError, urllib.error.URLError):
-        fail("Gemini API request timed out or was unreachable. No paid fallback is configured.")
-    if len(raw) > MAX_RESPONSE_BYTES:
+        for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+            try:
+                response = client.models.generate_content(
+                    model=MODEL,
+                    contents=instructions,
+                    config=config,
+                )
+                response_text = response.text or ""
+                break
+            except errors.APIError as exc:
+                status = exc.code
+                if status in GEMINI_PERMANENT_HTTP_CODES:
+                    fail(
+                        f"Gemini API rejected the request (HTTP {status}). "
+                        "Check the API key, model access, request schema, and Free Tier quota. "
+                        "No paid fallback is configured."
+                    )
+                if status is not None and status not in GEMINI_RETRYABLE_HTTP_CODES:
+                    fail(
+                        f"Gemini API failed with HTTP {status} after {attempt} attempt(s). "
+                        "No paid fallback is configured."
+                    )
+                if attempt == GEMINI_MAX_ATTEMPTS:
+                    fail(
+                        f"Gemini API transport/server error after {attempt} attempts. "
+                        "Check runner network/DNS/TLS and Google API availability. "
+                        "No paid fallback is configured."
+                    )
+                print(
+                    f"Gemini API transient error ({'connection' if status is None else status}); "
+                    f"retrying ({attempt}/{GEMINI_MAX_ATTEMPTS - 1})."
+                )
+            except (TimeoutError, ConnectionError, OSError) as exc:
+                if attempt == GEMINI_MAX_ATTEMPTS:
+                    fail(
+                        f"Gemini API connection failed after {attempt} attempts "
+                        f"({type(exc).__name__}). Check runner network/DNS/TLS. "
+                        "No paid fallback is configured."
+                    )
+                print(
+                    f"Gemini API connection issue ({type(exc).__name__}); "
+                    f"retrying ({attempt}/{GEMINI_MAX_ATTEMPTS - 1})."
+                )
+            if attempt < GEMINI_MAX_ATTEMPTS:
+                time.sleep(min(2 ** (attempt - 1) * 5, 20))
+    finally:
+        client.close()
+
+    if not response_text:
+        fail("Gemini API returned an empty response. No paid fallback is configured.")
+    if len(response_text.encode("utf-8")) > MAX_RESPONSE_BYTES:
         fail("Gemini response exceeded the configured size limit.")
-    response_data = json.loads(raw)
-    candidates = response_data.get("candidates", [])
-    if not candidates:
-        fail("Gemini returned no candidate response.")
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text_parts = [part.get("text", "") for part in parts if part.get("text")]
-    if not text_parts:
-        fail("Gemini returned no text response.")
-    result = json.loads("\n".join(text_parts))
+    try:
+        result = json.loads(response_text)
+    except json.JSONDecodeError:
+        fail("Gemini returned invalid JSON.")
     if not isinstance(result, dict) or not isinstance(result.get("files"), list):
         fail("Gemini response did not match the required JSON structure.")
     return result
