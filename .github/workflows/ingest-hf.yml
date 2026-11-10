@@ -1,0 +1,40 @@
+name: Hugging Face football data staging
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hf-football-staging
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Download and validate five-league dataset
+        run: python scripts/ingest_hf.py
+
+      - name: Upload staging artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-hf-staging
+          path: output/
+          if-no-files-found: error
+          retention-days: 7
