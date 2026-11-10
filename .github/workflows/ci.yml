@@ -18,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
@@ -56,6 +60,10 @@ jobs:
     env:
       DATABASE_URL: postgresql://anvil_test:anvil_test@localhost:5432/anvil_test
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - name: Install PostgreSQL client
         run: |
