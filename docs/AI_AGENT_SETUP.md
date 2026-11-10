@@ -44,7 +44,7 @@
 
 - The coding agent uses a fixed, reviewed Free Tier model allowlist: gemini-3.8-flash (primary), gemini-3.6-flash, and gemini-3.1-flash-lite (fallback order).
 - Each model gets at most two attempts. Retry delays use exponential backoff plus jitter.
-- Fallback is only used after retryable server errors (HTTP 500/502/503/504). Authentication, invalid request, model access, and quota/rate-limit errors (400/401/403/404/429) stop immediately.
+- Fallback is only used after retryable server errors (HTTP 408/500/502/503/504). Authentication, invalid request, model access, and quota/rate-limit errors (400/401/403/404/429) stop immediately.
 - Network/DNS/TLS errors are retried against the same model; they do not trigger model fallback because they are not evidence of model-specific overload.
 - The smoke-test workflow tests exactly the selected model so its result identifies which model was actually checked.
 - The allowlist prevents accidentally selecting an unapproved or paid model. Free Tier availability and quotas are provider-controlled and not guaranteed.
