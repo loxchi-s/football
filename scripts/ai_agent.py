@@ -219,8 +219,6 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
         )
     print(f"Gemini model used: {selected_model}")
 
-    if not response_text:
-        fail("Gemini API returned an empty response. No paid fallback is configured.")
     if len(response_text.encode("utf-8")) > MAX_RESPONSE_BYTES:
         fail("Gemini response exceeded the configured size limit.")
     try:
