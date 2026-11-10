@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,6 +17,9 @@ MAX_CONTEXT_CHARS = 80_000
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_FILES = 10
 MAX_FILE_BYTES = 60_000
+GEMINI_TIMEOUT_SECONDS = 90
+GEMINI_MAX_ATTEMPTS = 3
+GEMINI_RETRYABLE_HTTP_CODES = {408, 500, 502, 503, 504}
 ALLOWED_ROOTS = ("scripts/", "tests/", "docs/")
 ALLOWED_ROOT_FILES = {"README.md", "pyproject.toml", "requirements.txt", "requirements-dev.txt"}
 PROTECTED_PATHS = {".github", "scripts/ai_agent.py", "P-Model_5ลีก_walk_forward_v2_calibration_review.xlsx"}
@@ -131,15 +135,42 @@ def call_gemini(task: str, files: list[dict[str, str]]) -> dict[str, object]:
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        if exc.code in (403, 429):
-            fail("Gemini Free Tier quota/access limit reached. Stopped; no paid fallback is configured.")
-        fail(f"Gemini API request failed with HTTP {exc.code}. No paid fallback is configured.")
-    except (TimeoutError, urllib.error.URLError):
-        fail("Gemini API request timed out or was unreachable. No paid fallback is configured.")
+    raw = b""
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=GEMINI_TIMEOUT_SECONDS) as response:
+                raw = response.read(MAX_RESPONSE_BYTES + 1)
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code in (400, 401, 403, 404, 429):
+                fail(
+                    f"Gemini API rejected the request (HTTP {exc.code}). "
+                    "Check the API key, model access, request schema, and Free Tier quota. "
+                    "No paid fallback is configured."
+                )
+            if exc.code not in GEMINI_RETRYABLE_HTTP_CODES or attempt == GEMINI_MAX_ATTEMPTS:
+                fail(
+                    f"Gemini API failed with HTTP {exc.code} after {attempt} attempt(s). "
+                    "No paid fallback is configured."
+                )
+            print(f"Gemini API returned HTTP {exc.code}; retrying ({attempt}/{GEMINI_MAX_ATTEMPTS - 1}).")
+        except (TimeoutError, urllib.error.URLError, ConnectionError, OSError) as exc:
+            reason = getattr(exc, "reason", exc)
+            if attempt == GEMINI_MAX_ATTEMPTS:
+                fail(
+                    f"Gemini API connection failed after {attempt} attempts "
+                    f"({type(reason).__name__}: {str(reason)[:240]}). "
+                    "Check runner network/DNS/TLS and Google API availability. "
+                    "No paid fallback is configured."
+                )
+            print(
+                f"Gemini API connection issue ({type(reason).__name__}); "
+                f"retrying ({attempt}/{GEMINI_MAX_ATTEMPTS - 1})."
+            )
+        if attempt < GEMINI_MAX_ATTEMPTS:
+            time.sleep(min(2 ** (attempt - 1) * 5, 20))
+    if not raw:
+        fail("Gemini API returned an empty response. No paid fallback is configured.")
     if len(raw) > MAX_RESPONSE_BYTES:
         fail("Gemini response exceeded the configured size limit.")
     response_data = json.loads(raw)
