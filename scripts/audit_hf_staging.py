@@ -198,6 +198,10 @@ def main() -> int:
             report["temporal_checks"][name] = timestamp_metrics(frame, fixture_scope, name)
 
     hard_failures: list[str] = []
+    if fixture_scope.empty:
+        hard_failures.append("selected fixture scope is empty")
+    if matches.empty:
+        hard_failures.append("no played fixtures staged for selected leagues")
     if report["null_match_ids"]:
         hard_failures.append("null match IDs")
     if report["duplicate_match_ids"]:
