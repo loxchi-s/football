@@ -38,6 +38,10 @@ def allowed_path(raw_path: str) -> Path:
         fail(f"Path is outside the agent allowlist: {normalized}")
     if normalized == "scripts/ai_agent.py":
         fail("The agent's own policy code is protected.")
+    root = Path.cwd().resolve()
+    resolved = (root / path).resolve()
+    if root not in resolved.parents:
+        fail(f"Path resolves outside the repository: {normalized}")
     return path
 
 
