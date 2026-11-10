@@ -4,7 +4,3 @@ __pycache__/
 output/
 *.xlsx
 *.xlsm
-
-*.xlsx
-*.xlsm
-output/
