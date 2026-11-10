@@ -17,6 +17,8 @@ concurrency:
 jobs:
   agent:
     if: github.ref == 'refs/heads/main'
+    outputs:
+      has_changes: ${{ steps.validate.outputs.has_changes }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
