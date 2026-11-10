@@ -7,14 +7,15 @@
 - Uses Google Gemini Developer API model `gemini-3.8-flash`, currently listed with free input/output pricing.
 - Requires the repository Actions secret `GEMINI_API_KEY`.
 - The workflow stops on missing key, quota/rate limit, or API failure. There is no paid fallback.
-- Every proposed change is checked with Ruff, compileall, and pytest before a branch and PR are created.
+- The workflow is split into two isolated jobs: generation/validation has read-only repository permission; publishing runs on a fresh runner with write permission and never executes generated code.
+- Proposed changes are checked with Ruff, compileall, and pytest before a patch artifact is passed to the publisher.
 
 ## Data and permission boundaries
 
 - The agent receives only tracked text files under `scripts/`, `tests/`, `docs/`, and a small allowlist of root project configuration files.
 - It cannot change `.github/workflows/`, its own policy script, the Master workbook, or production database configuration.
 - No database credentials, workbook, or production data are passed to Gemini.
-- Agent changes are pushed to a new `ai-agent/run-<id>` branch and submitted as a PR. It cannot merge.
+- Agent changes are passed as a short-lived patch artifact to a clean publisher runner, then pushed to a new `ai-agent/run-<id>` branch and submitted as a PR. The publisher does not execute generated code. The agent cannot merge.
 - Review the generated diff before merging. The agent is not a substitute for code review.
 
 ## One-time setup
