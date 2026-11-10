@@ -35,6 +35,9 @@ jobs:
       - name: Download and validate five-league dataset
         run: python scripts/ingest_hf.py
 
+      - name: Audit staged data completeness
+        run: python scripts/audit_hf_staging.py
+
       - name: Upload staging artifact
         uses: actions/upload-artifact@v4
         with:
