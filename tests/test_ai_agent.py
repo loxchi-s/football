@@ -1,5 +1,8 @@
+import json
+
 import pytest
 
+from scripts import ai_agent
 from scripts.ai_agent import allowed_path
 
 
@@ -40,3 +43,39 @@ def test_allowed_path_rejects_symlinked_parent(tmp_path, monkeypatch):
 def test_allowed_path_rejects_control_characters(path):
     with pytest.raises(SystemExit, match="Control characters"):
         allowed_path(path)
+
+
+
+def test_gemini_request_uses_supported_generation_config(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    response_body = {
+        "candidates": [
+            {"content": {"parts": [{"text": json.dumps({"summary": "ok", "files": []})}]}}
+        ]
+    }
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, _limit):
+            return json.dumps(response_body).encode("utf-8")
+
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["request"] = request
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(ai_agent.urllib.request, "urlopen", fake_urlopen)
+    result = ai_agent.call_gemini("Add a harmless unit test", [])
+
+    payload = json.loads(captured["request"].data)
+    assert result["files"] == []
+    assert captured["timeout"] == 120
+    assert "temperature" not in payload["generationConfig"]
+    assert payload["generationConfig"]["responseMimeType"] == "application/json"
