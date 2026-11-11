@@ -17,37 +17,46 @@ LEAGUE_NAMES = {
     9: "Ligue 1",
     11: "Bundesliga",
 }
-BASE_URL = f"https://huggingface.co/datasets/{REPO_ID}/blob/main/"
+BASE_URL = f"https://huggingface.co/datasets/{REPO_ID}/blob/"
 
 
-def download_table(name: str) -> pd.DataFrame:
-    path = hf_hub_download(repo_id=REPO_ID, repo_type="dataset", filename=f"{name}.parquet")
+def download_table(name: str, revision: str) -> pd.DataFrame:
+    """Download one Parquet table pinned to the audited dataset revision."""
+    path = hf_hub_download(
+        repo_id=REPO_ID,
+        repo_type="dataset",
+        filename=f"{name}.parquet",
+        revision=revision,
+    )
     return pd.read_parquet(path)
 
 
 def require_columns(df: pd.DataFrame, table: str, columns: set[str]) -> None:
+    """Raise a clear error when a source table lacks required columns."""
     missing = columns.difference(df.columns)
     if missing:
         raise ValueError(f"{table}: missing required columns: {sorted(missing)}")
 
 
 def main() -> None:
+    """Stage the five target leagues without modifying the canonical workbook."""
     OUT.mkdir(parents=True, exist_ok=True)
     api = HfApi()
     info = api.dataset_info(REPO_ID)
     revision = info.sha
     last_modified = info.last_modified.isoformat() if info.last_modified else None
 
-    leagues = download_table("leagues")
-    fixtures = download_table("fixtures")
-    teams = download_table("teams")
-    stats = download_table("match_stats")
-    odds = download_table("odds")
+    source_url = BASE_URL + revision + "/"
+    leagues = download_table("leagues", revision)
+    fixtures = download_table("fixtures", revision)
+    teams = download_table("teams", revision)
+    stats = download_table("match_stats", revision)
+    odds = download_table("odds", revision)
 
     require_columns(leagues, "leagues", {"id", "name", "country"})
     require_columns(fixtures, "fixtures", {
         "id", "date_utc", "league_id", "home_team_id", "away_team_id",
-        "goals_home", "goals_away", "status_norm", "is_played",
+        "goals_home", "goals_away", "status_norm", "is_played", "btts",
     })
     require_columns(teams, "teams", {"id", "name"})
     require_columns(stats, "match_stats", {"fixture_id", "known_at"})
@@ -85,24 +94,33 @@ def main() -> None:
         "btts",
     ]].rename(columns={"id": "hf_fixture_id", "date_utc": "kickoff_utc"})
     matches["source_dataset"] = REPO_ID
-    matches["source_url"] = BASE_URL + "fixtures.parquet"
+    matches["source_url"] = source_url + "fixtures.parquet"
     matches["source_revision"] = revision
     matches["stable_key_note"] = "Use hf_fixture_id as source key; do not overwrite existing Master match_id."
 
+    # Keep the full selected fixture universe so child rows for unplayed fixtures
+    # are not incorrectly classified as orphans against played matches only.
+    fixture_scope = selected[["id", "date_utc", "league_id", "is_played"]].rename(
+        columns={"id": "hf_fixture_id", "date_utc": "kickoff_utc"}
+    )
+    fixture_scope["source_dataset"] = REPO_ID
+    fixture_scope["source_revision"] = revision
+
     stats_delta = stats[stats["fixture_id"].isin(selected["id"])].copy()
     stats_delta["source_dataset"] = REPO_ID
-    stats_delta["source_url"] = BASE_URL + "match_stats.parquet"
+    stats_delta["source_url"] = source_url + "match_stats.parquet"
     stats_delta["source_revision"] = revision
-    stats_delta["usage_guard"] = "POST_MATCH_ONLY: known_at is kickoff + 105 minutes; never use as pre-match predictor."
+    stats_delta["usage_guard"] = "POST_MATCH_ONLY: known_at must be at/after kickoff; never use as pre-match predictor."
 
     odds_delta = odds[odds["fixture_id"].isin(selected["id"])].copy()
     odds_delta["source_dataset"] = REPO_ID
-    odds_delta["source_url"] = BASE_URL + "odds.parquet"
+    odds_delta["source_url"] = source_url + "odds.parquet"
     odds_delta["source_revision"] = revision
-    odds_delta["usage_guard"] = "CLOSING/AROUND_KICKOFF: verify known_at < kickoff before any pre-match EV use."
+    odds_delta["usage_guard"] = "PRE_MATCH_ELIGIBLE_ONLY_WHEN: known_at is parseable and strictly before kickoff."
 
     for name, frame in (
         ("matches_delta.csv", matches),
+        ("fixture_scope.csv", fixture_scope),
         ("match_stats_delta.csv", stats_delta),
         ("odds_delta.csv", odds_delta),
     ):
@@ -123,13 +141,15 @@ def main() -> None:
         "duplicate_hf_fixture_ids": int(matches["hf_fixture_id"].duplicated().sum()),
         "note": "Staging only. Master workbook is not included in this public repository and is not modified by this workflow.",
         "files": {
-            "matches_delta.csv": BASE_URL + "fixtures.parquet",
-            "match_stats_delta.csv": BASE_URL + "match_stats.parquet",
-            "odds_delta.csv": BASE_URL + "odds.parquet",
+            "matches_delta.csv": source_url + "fixtures.parquet",
+            "fixture_scope.csv": source_url + "fixtures.parquet",
+            "match_stats_delta.csv": source_url + "match_stats.parquet",
+            "odds_delta.csv": source_url + "odds.parquet",
         },
     }
-    (OUT / "audit.json").write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(audit, ensure_ascii=False, indent=2))
+    payload = json.dumps(audit, ensure_ascii=False, indent=2, allow_nan=False)
+    (OUT / "audit.json").write_text(payload, encoding="utf-8")
+    print(payload)
 
 
 if __name__ == "__main__":
