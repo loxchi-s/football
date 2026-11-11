@@ -117,10 +117,11 @@ def odds_identity_metrics(frame: pd.DataFrame) -> dict[str, int | list[str]]:
 
 def main() -> int:
     """Audit staged rows, preserving valid multi-bookmaker odds and fixture scope."""
-    matches = load_csv(MATCHES)
-    fixture_scope = load_csv(FIXTURE_SCOPE)
-    stats = load_csv(STATS)
-    odds = load_csv(ODDS)
+    # Resolve staging paths from OUT at runtime so callers and tests can redirect the audit safely.
+    matches = load_csv(OUT / MATCHES.name)
+    fixture_scope = load_csv(OUT / FIXTURE_SCOPE.name)
+    stats = load_csv(OUT / STATS.name)
+    odds = load_csv(OUT / ODDS.name)
 
     required_matches = {"hf_fixture_id", "kickoff_utc", "league"}
     missing = sorted(required_matches.difference(matches.columns))
