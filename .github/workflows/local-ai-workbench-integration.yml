@@ -1,0 +1,15 @@
+name: Local AI Workbench Reusable Integration
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  reusable-review:
+    uses: loxchi-s/dorker-skills/.github/workflows/local-ai-workbench.yml@bdd9635c129537d6df0b18adb52d44c4f35af68b
+    with:
+      implementation_ref: bdd9635c129537d6df0b18adb52d44c4f35af68b
+      prompt: "Integration test only: review the caller repository change for correctness, security, and workflow integration."
