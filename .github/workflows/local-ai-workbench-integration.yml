@@ -1,8 +1,8 @@
 name: Local AI Workbench Reusable Integration
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+    branches: [test/local-ai-workbench-e2e-20261117]
 
 permissions:
   contents: read
