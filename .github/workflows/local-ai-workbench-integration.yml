@@ -1,8 +1,6 @@
 name: Local AI Workbench Reusable Integration
 
 on:
-  push:
-    branches: [test/local-ai-workbench-e2e-20261117]
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -11,7 +9,7 @@ permissions:
 
 jobs:
   reusable-review:
-    uses: loxchi-s/dorker-skills/.github/workflows/local-ai-workbench.yml@bdd9635c129537d6df0b18adb52d44c4f35af68b
+    uses: loxchi-s/dorker-skills/.github/workflows/local-ai-workbench.yml@13e30dbb15aecf9673d9ed435bc58114d7583c78
     with:
-      implementation_ref: bdd9635c129537d6df0b18adb52d44c4f35af68b
+      implementation_ref: 13e30dbb15aecf9673d9ed435bc58114d7583c78
       prompt: "Integration test only: review the caller repository change for correctness, security, and workflow integration."
